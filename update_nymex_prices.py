@@ -3,7 +3,6 @@ import requests
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from datetime import datetime
-import time
 
 load_dotenv()
 
@@ -14,8 +13,6 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 EIA_API_KEY = os.getenv("EIA_API_KEY")
 TABLE_NAME = "nymex_prices"
-MAX_RETRIES = 3
-RETRY_DELAY = 5  # seconds
 
 # ----------------------------
 # SETUP SUPABASE CLIENT
@@ -46,10 +43,10 @@ def get_latest_price_from_db():
         return None
 
 # ----------------------------
-# FUNCTION TO FETCH NYMEX PRICE FROM EIA (WITH RETRY)
+# FUNCTION TO FETCH NYMEX PRICE FROM EIA
 # ----------------------------
 def fetch_nymex_price_eia():
-    """Fetch NYMEX Heating Oil price from EIA API with retry logic"""
+    """Fetch NYMEX Heating Oil price from EIA API"""
     
     if not EIA_API_KEY:
         print("❌ Missing EIA_API_KEY in environment variables")
@@ -65,66 +62,56 @@ def fetch_nymex_price_eia():
     
     print("📡 Fetching NYMEX Heating Oil price from EIA...")
     
-    # EIA Series ID for NY Harbor Heating Oil Spot Price FOB ($/gal)
-    series_id = "PET.EER_EPLLPA_PF4_Y35NY_DPG.D"
-    
-    url = "https://api.eia.gov/v2/petroleum/pri/spt/data/"
-    params = {
-        "api_key": EIA_API_KEY,
-        "frequency": "daily",
-        "data[0]": "value",
-        "facets[series][]": series_id,
-        "sort[0][column]": "period",
-        "sort[0][direction]": "desc",
-        "length": 1
-    }
-    
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            response = requests.get(url, params=params, timeout=30)
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            if not data.get("response", {}).get("data"):
-                raise ValueError("No data returned from EIA")
-            
-            latest = data["response"]["data"][0]
-            price = float(latest["value"])
-            date = latest["period"]
-            
-            print(f"✅ Successfully fetched from EIA (attempt {attempt})")
-            print(f"   Price: ${price:.2f}")
-            print(f"   Date: {date}")
-            
-            return {
-                "price": round(price, 2),
-                "date": date
-            }
-            
-        except requests.exceptions.RequestException as e:
-            print(f"⚠️ Attempt {attempt}/{MAX_RETRIES} failed: {e}")
-            
-            if hasattr(e, 'response') and e.response is not None:
-                if e.response.status_code == 401:
-                    print("❌ API key is invalid. Cannot retry.")
-                    raise
-                elif e.response.status_code == 403:
-                    print("❌ API key doesn't have permission. Cannot retry.")
-                    raise
-            
-            if attempt < MAX_RETRIES:
-                print(f"⏳ Retrying in {RETRY_DELAY} seconds...")
-                time.sleep(RETRY_DELAY)
-            else:
-                print(f"❌ All {MAX_RETRIES} attempts failed")
-                raise
-                
-        except (KeyError, ValueError) as e:
-            print(f"❌ Error parsing EIA response: {e}")
-            if 'data' in locals():
-                print(f"Response data: {data}")
-            raise
+    try:
+        # EIA API v2 endpoint for spot prices
+        # Product: EPD2F = No. 2 Heating Oil
+        # Area: Y35NY = New York Harbor
+        url = "https://api.eia.gov/v2/petroleum/pri/spt/data/"
+        params = {
+            "api_key": EIA_API_KEY,
+            "frequency": "daily",
+            "data[0]": "value",
+            "facets[product][]": "EPD2F",  # No. 2 Heating Oil
+            "facets[area][]": "Y35NY",      # New York Harbor
+            "sort[0][column]": "period",
+            "sort[0][direction]": "desc",
+            "offset": 0,
+            "length": 1
+        }
+        
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if not data.get("response", {}).get("data"):
+            raise ValueError("No data returned from EIA")
+        
+        latest = data["response"]["data"][0]
+        price = float(latest["value"])
+        date = latest["period"]
+        
+        print(f"✅ Successfully fetched from EIA")
+        print(f"   Price: ${price:.2f}")
+        print(f"   Date: {date}")
+        
+        return {
+            "price": round(price, 2),
+            "date": date
+        }
+        
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error fetching from EIA: {e}")
+        if hasattr(response, 'status_code'):
+            if response.status_code == 401:
+                print("⚠️ API key is invalid. Please check your EIA_API_KEY")
+            elif response.status_code == 403:
+                print("⚠️ API key doesn't have permission. Make sure you're using a valid EIA key")
+        raise
+    except (KeyError, ValueError) as e:
+        print(f"❌ Error parsing EIA response: {e}")
+        print(f"Response data: {data}")
+        raise
 
 # ----------------------------
 # FUNCTION TO CALCULATE CHANGE
