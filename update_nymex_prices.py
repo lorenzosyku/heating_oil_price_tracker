@@ -63,35 +63,53 @@ def fetch_nymex_price_eia():
     print("📡 Fetching NYMEX Heating Oil price from EIA...")
     
     try:
-        # EIA API v2 endpoint for spot prices
-        # Product: EPD2F = No. 2 Heating Oil
-        # Area: Y35NY = New York Harbor
+        # Try simplified approach - fetch recent spot prices and filter
         url = "https://api.eia.gov/v2/petroleum/pri/spt/data/"
         params = {
             "api_key": EIA_API_KEY,
             "frequency": "daily",
-            "data[0]": "value",
-            "facets[product][]": "EPD2F",  # No. 2 Heating Oil
-            "facets[area][]": "Y35NY",      # New York Harbor
+            "data[]": "value",
             "sort[0][column]": "period",
             "sort[0][direction]": "desc",
             "offset": 0,
-            "length": 1
+            "length": 100  # Get more records to filter
         }
         
-        response = requests.get(url, params=params)
+        print(f"🔍 Making API request...")
+        response = requests.get(url, params=params, timeout=30)
+        
+        # Print response for debugging
+        print(f"📊 Response status: {response.status_code}")
+        
         response.raise_for_status()
         
         data = response.json()
         
         if not data.get("response", {}).get("data"):
+            print(f"⚠️ API Response: {data}")
             raise ValueError("No data returned from EIA")
         
-        latest = data["response"]["data"][0]
+        # Filter for NY Harbor Heating Oil (product code EPD2F, area Y35NY)
+        heating_oil_data = [
+            item for item in data["response"]["data"]
+            if item.get("product") == "EPD2F" and item.get("area") == "Y35NY"
+        ]
+        
+        if not heating_oil_data:
+            print("⚠️ No heating oil data found. Available products:")
+            # Show what's available
+            products = set((item.get("product"), item.get("product-name")) for item in data["response"]["data"][:10])
+            for prod in list(products)[:5]:
+                print(f"   - {prod[0]}: {prod[1]}")
+            raise ValueError("NY Harbor Heating Oil data not found in response")
+        
+        latest = heating_oil_data[0]
         price = float(latest["value"])
         date = latest["period"]
         
         print(f"✅ Successfully fetched from EIA")
+        print(f"   Product: {latest.get('product-name', 'Unknown')}")
+        print(f"   Area: {latest.get('area-name', 'Unknown')}")
         print(f"   Price: ${price:.2f}")
         print(f"   Date: {date}")
         
@@ -102,15 +120,17 @@ def fetch_nymex_price_eia():
         
     except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching from EIA: {e}")
-        if hasattr(response, 'status_code'):
-            if response.status_code == 401:
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"Response content: {e.response.text[:500]}")
+            if e.response.status_code == 401:
                 print("⚠️ API key is invalid. Please check your EIA_API_KEY")
-            elif response.status_code == 403:
+            elif e.response.status_code == 403:
                 print("⚠️ API key doesn't have permission. Make sure you're using a valid EIA key")
         raise
     except (KeyError, ValueError) as e:
         print(f"❌ Error parsing EIA response: {e}")
-        print(f"Response data: {data}")
+        if 'data' in locals():
+            print(f"Response keys: {data.get('response', {}).keys()}")
         raise
 
 # ----------------------------
