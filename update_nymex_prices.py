@@ -89,11 +89,12 @@ def fetch_nymex_price_eia():
             print(f"⚠️ API Response: {data}")
             raise ValueError("No data returned from EIA")
         
-        # Filter for NY Harbor Heating Oil / No 2 Diesel Low Sulfur
-        # EPD2DXL0 = No 2 Diesel Low Sulfur (0-15 ppm) - this is heating oil
+        # Filter for NY Harbor Heating Oil / No 2 Fuel Oil
+        # EPD2F = No 2 Fuel Oil / Heating Oil
+        # Area name = "NEW YORK CITY" (area field is None in the API)
         heating_oil_data = [
             item for item in data["response"]["data"]
-            if item.get("product") == "EPD2DXL0" and item.get("area") == "Y35NY"
+            if item.get("product") == "EPD2F" and item.get("area-name") == "NEW YORK CITY"
         ]
         
         if not heating_oil_data:
