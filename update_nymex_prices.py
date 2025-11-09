@@ -97,11 +97,16 @@ def fetch_nymex_price_eia():
         ]
         
         if not heating_oil_data:
-            print("⚠️ No heating oil data found. Available products:")
-            # Show what's available
-            products = set((item.get("product"), item.get("product-name")) for item in data["response"]["data"][:10])
-            for prod in list(products)[:5]:
-                print(f"   - {prod[0]}: {prod[1]}")
+            print("⚠️ No heating oil data found. Showing ALL available combinations:")
+            # Show ALL products with their areas
+            combinations = set(
+                (item.get("product"), item.get("area"), item.get("product-name", "Unknown"), item.get("area-name", "Unknown")) 
+                for item in data["response"]["data"][:50]
+            )
+            for prod, area, prod_name, area_name in list(combinations)[:15]:
+                print(f"   - Product: {prod} ({prod_name})")
+                print(f"     Area: {area} ({area_name})")
+                print()
             raise ValueError("NY Harbor Heating Oil data not found in response")
         
         latest = heating_oil_data[0]
