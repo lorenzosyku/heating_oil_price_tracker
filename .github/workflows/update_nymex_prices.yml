@@ -2,17 +2,17 @@ name: Update NYMEX Heating Oil Prices
 
 on:
   schedule:
-    # Runs every day at 6 AM UTC (1 AM EST)
+    # Runs every day at 6 AM UTC (1 AM EST, 2 AM EDT)
     - cron: "0 6 * * *"
-  workflow_dispatch:  # allows manual trigger from GitHub UI
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
 
 jobs:
   update-prices:
     runs-on: ubuntu-latest
-
+    
     steps:
       # -----------------------------
-      # 1️⃣  Checkout your repository
+      # 1️⃣  Checkout repository
       # -----------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,6 +24,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: 'pip'  # Caches dependencies for faster builds
 
       # -----------------------------
       # 3️⃣  Install dependencies
@@ -34,7 +35,7 @@ jobs:
           pip install -r requirements.txt
 
       # -----------------------------
-      # 4️⃣  Run the update script
+      # 4️⃣  Run the NYMEX price updater
       # -----------------------------
       - name: Run NYMEX price updater
         env:
@@ -42,4 +43,13 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
         run: |
-          python your_script_name.py
+          python update_nymex_prices.py
+
+      # -----------------------------
+      # 5️⃣  Notify on failure (optional)
+      # -----------------------------
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ NYMEX price update failed!"
+          echo "Check the logs above for details."
